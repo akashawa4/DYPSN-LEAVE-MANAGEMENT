@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle, XCircle, AlertTriangle, X, Filter, Calendar, FileText, User, MapPin, Search } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { leaveService, attendanceService } from '../../firebase/firestore';
+import { LeaveRequest } from '../../types';
 
 interface ActivityDetailModalProps {
   isOpen: boolean;
@@ -13,149 +15,8 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({ isOpen, onClo
 
   if (!isOpen) return null;
 
-  const allActivities = [
-    {
-      id: 1,
-      type: 'leave_approved',
-      title: 'Leave Request Approved',
-      description: 'Your sick leave for March 15-16 has been approved by HR Executive',
-      time: '2 hours ago',
-      date: '2024-03-22',
-      icon: CheckCircle,
-      color: 'text-green-600',
-      details: {
-        leaveType: 'Medical Leave',
-        duration: '2 days',
-        finalApprover: 'Mr. Arjun Kumar (HR Executive)',
-        approvalFlow: 'HOD → Principal → Registrar → HR Executive',
-        reason: 'Fever and flu symptoms',
-        status: 'Approved'
-      }
-    },
-    {
-      id: 2,
-      type: 'attendance_marked',
-      title: 'Attendance Marked',
-      description: 'Clock in at 9:15 AM today',
-      time: '5 hours ago',
-      date: '2024-03-22',
-      icon: Clock,
-      color: 'text-blue-600',
-      details: {
-        clockIn: '9:15 AM',
-        clockOut: 'Not yet',
-        location: 'Main Campus - Block A',
-        workingHours: '5h 45m (so far)',
-        status: 'Active'
-      }
-    },
-    {
-      id: 3,
-      type: 'leave_submitted',
-      title: 'Leave Request Submitted',
-      description: 'Casual leave application for March 25 - awaiting HOD approval',
-      time: '1 day ago',
-      date: '2024-03-21',
-      icon: AlertTriangle,
-      color: 'text-amber-600',
-      details: {
-        leaveType: 'Casual Leave',
-        duration: '1 day',
-        reason: 'Personal work - family function',
-        status: 'Pending with HOD',
-        submittedTo: 'Dr. Michael Chen',
-        nextApprover: 'Principal → Registrar → HR Executive'
-      }
-    },
-    {
-      id: 4,
-      type: 'attendance_marked',
-      title: 'Attendance Marked',
-      description: 'Full day attendance - 8h 20m',
-      time: '1 day ago',
-      date: '2024-03-21',
-      icon: Clock,
-      color: 'text-blue-600',
-      details: {
-        clockIn: '9:10 AM',
-        clockOut: '5:30 PM',
-        location: 'Main Campus - Block A',
-        workingHours: '8h 20m',
-        status: 'Completed'
-      }
-    },
-    {
-      id: 5,
-      type: 'leave_approved',
-      title: 'Leave Request Approved',
-      description: 'Casual leave for March 8 was approved by HR Executive',
-      time: '2 weeks ago',
-      date: '2024-03-07',
-      icon: CheckCircle,
-      color: 'text-green-600',
-      details: {
-        leaveType: 'Casual Leave',
-        duration: '1 day',
-        finalApprover: 'Mr. Arjun Kumar (HR Executive)',
-        approvalFlow: 'HOD → Principal → Registrar → HR Executive',
-        reason: 'Personal appointment',
-        status: 'Approved'
-      }
-    },
-    {
-      id: 6,
-      type: 'profile_updated',
-      title: 'Profile Information Updated',
-      description: 'Emergency contact details updated',
-      time: '3 weeks ago',
-      date: '2024-03-01',
-      icon: User,
-      color: 'text-purple-600',
-      details: {
-        field: 'Emergency Contact',
-        oldValue: '+91 98765 43210',
-        newValue: '+91 98765 43211',
-        updatedBy: 'Self',
-        status: 'Updated'
-      }
-    },
-    {
-      id: 7,
-      type: 'attendance_override',
-      title: 'Attendance Override Applied',
-      description: 'Late arrival excused due to traffic - approved by HR Executive',
-      time: '1 month ago',
-      date: '2024-02-28',
-      icon: AlertTriangle,
-      color: 'text-amber-600',
-      details: {
-        originalTime: '10:30 AM',
-        correctedTime: '9:00 AM',
-        reason: 'Heavy traffic due to road construction',
-        approver: 'Mr. Arjun Kumar (HR Executive)',
-        approvalFlow: 'HOD → Principal → Registrar → HR Executive',
-        status: 'Override Applied'
-      }
-    },
-    {
-      id: 8,
-      type: 'leave_rejected',
-      title: 'Leave Request Returned',
-      description: 'Casual leave request needs more details - returned by HOD',
-      time: '1 month ago',
-      date: '2024-02-25',
-      icon: XCircle,
-      color: 'text-red-600',
-      details: {
-        leaveType: 'Casual Leave',
-        duration: '2 days',
-        reason: 'Insufficient documentation',
-        returnedBy: 'Dr. Michael Chen (HOD)',
-        nextStep: 'Resubmit with proper documentation',
-        status: 'Returned for Revision'
-      }
-    }
-  ];
+  // This would be populated with real activity data from Firestore
+  const allActivities: any[] = [];
 
   const filteredActivities = allActivities.filter(activity => {
     const matchesFilter = filterType === 'all' || activity.type.includes(filterType);
@@ -204,88 +65,54 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({ isOpen, onClo
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <div className="flex items-center space-x-2">
-              <Filter className="w-4 h-4 text-gray-500" />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               >
                 <option value="all">All Activities</option>
-                <option value="leave">Leave Related</option>
+              <option value="leave">Leave Requests</option>
                 <option value="attendance">Attendance</option>
                 <option value="profile">Profile Updates</option>
               </select>
-            </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-6">
+          {filteredActivities.length === 0 ? (
+            <div className="text-center py-12">
+              <Calendar className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No activities found</h3>
+              <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+            </div>
+          ) : (
           <div className="space-y-4">
-            {filteredActivities.map((activity) => {
-              const Icon = activity.icon;
-              return (
-                <div key={activity.id} className={`border rounded-lg p-4 ${getActivityTypeColor(activity.type)}`}>
+              {filteredActivities.map((activity) => (
+                <div
+                  key={activity.id}
+                  className={`border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${getActivityTypeColor(activity.type)}`}
+                >
                   <div className="flex items-start space-x-4">
-                    <div className={`p-2 rounded-lg bg-white ${activity.color}`}>
-                      <Icon className="w-5 h-5" />
+                    <div className="flex-shrink-0 mt-1">
+                      <activity.icon className={`w-5 h-5 ${activity.color}`} />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
-                          <h4 className="text-sm font-medium text-gray-900">{activity.title}</h4>
-                          <p className="text-sm text-gray-600 mt-1">{activity.description}</p>
-                          <p className="text-xs text-gray-400 mt-2">{activity.time} • {activity.date}</p>
-                        </div>
-                      </div>
-                      
-                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                        {Object.entries(activity.details).map(([key, value]) => (
-                          <div key={key} className="flex justify-between">
-                            <span className="text-gray-500 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}:</span>
-                            <span className="font-medium text-gray-900">{value}</span>
+                          <h4 className="text-sm font-medium text-gray-900 mb-1">{activity.title}</h4>
+                          <p className="text-sm text-gray-600 mb-2">{activity.description}</p>
+                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <span>{activity.time}</span>
+                            <span>{activity.date}</span>
                           </div>
-                        ))}
-                      </div>
-
-                      {(activity.type === 'leave_approved' || activity.type === 'leave_submitted') && (
-                        <div className="mt-3 p-2 bg-blue-50 rounded-lg">
-                          <p className="text-xs text-blue-800">
-                            <strong>Approval Process:</strong> All leave requests follow the hierarchy: 
-                            HOD → Principal → Registrar → HR Executive
-                          </p>
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-
-          {filteredActivities.length === 0 && (
-            <div className="text-center py-12">
-              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Search className="w-6 h-6 text-gray-400" />
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No activities found</h3>
-              <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+              ))}
             </div>
           )}
-        </div>
-
-        <div className="p-6 border-t border-gray-200 bg-gray-50">
-          <div className="flex items-center justify-between text-sm text-gray-600">
-            <span>Showing {filteredActivities.length} of {allActivities.length} activities</span>
-            <div className="flex items-center space-x-4">
-              <button className="text-blue-600 hover:text-blue-700 font-medium">
-                Export History
-              </button>
-              <button className="text-blue-600 hover:text-blue-700 font-medium">
-                Download Report
-              </button>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -294,85 +121,82 @@ const ActivityDetailModal: React.FC<ActivityDetailModalProps> = ({ isOpen, onClo
 
 const RecentActivity: React.FC = () => {
   const { user } = useAuth();
-  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [recentActivities, setRecentActivities] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const teacherActivities = [
-    {
-      id: 1,
-      type: 'leave_approved',
-      title: 'Leave Request Approved',
-      description: 'Your sick leave for March 15-16 has been approved by HR Executive',
-      time: '2 hours ago',
-      icon: CheckCircle,
-      color: 'text-green-600'
-    },
-    {
-      id: 2,
-      type: 'attendance_marked',
-      title: 'Attendance Marked',
-      description: 'Clock in at 9:15 AM today',
-      time: '5 hours ago',
-      icon: Clock,
-      color: 'text-blue-600'
-    },
-    {
-      id: 3,
-      type: 'leave_submitted',
-      title: 'Leave Request Submitted',
-      description: 'Casual leave application for March 25 - awaiting HOD approval',
-      time: '1 day ago',
-      icon: AlertTriangle,
-      color: 'text-amber-600'
-    }
-  ];
+  // Load recent activities from Firestore
+  useEffect(() => {
+    const loadRecentActivities = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        // Get recent leave requests
+        const leaveRequests = await leaveService.getLeaveRequestsByUser(user.id);
+        
+        // Convert leave requests to activity format
+        const activities = leaveRequests.slice(0, 5).map((request, index) => ({
+          id: `leave_${request.id}`,
+          type: `leave_${request.status}`,
+          title: `Leave Request ${request.status.charAt(0).toUpperCase() + request.status.slice(1)}`,
+          description: `${request.leaveType} for ${request.daysCount} day(s) - ${request.reason.substring(0, 50)}...`,
+          time: formatTimeAgo(request.submittedAt),
+          date: new Date(request.submittedAt).toLocaleDateString(),
+          icon: request.status === 'approved' ? CheckCircle : 
+                request.status === 'rejected' ? XCircle : AlertTriangle,
+          color: request.status === 'approved' ? 'text-green-600' : 
+                 request.status === 'rejected' ? 'text-red-600' : 'text-amber-600'
+        }));
+        
+        setRecentActivities(activities);
+      } catch (error) {
+        console.error('Error loading recent activities:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const adminActivities = [
-    {
-      id: 1,
-      type: 'leave_approved',
-      title: 'Leave Request Approved',
-      description: 'Approved Dr. Sarah Johnson\'s medical leave (Final approval by HR Executive)',
-      time: '30 minutes ago',
-      icon: CheckCircle,
-      color: 'text-green-600'
-    },
-    {
-      id: 2,
-      type: 'user_added',
-      title: 'New User Added',
-      description: 'Dr. Amit Patel added to Computer Science department',
-      time: '2 hours ago',
-      icon: AlertTriangle,
-      color: 'text-blue-600'
-    },
-    {
-      id: 3,
-      type: 'leave_rejected',
-      title: 'Leave Request Returned',
-      description: 'Returned leave request to HOD for insufficient documentation',
-      time: '4 hours ago',
-      icon: XCircle,
-      color: 'text-red-600'
-    },
-    {
-      id: 4,
-      type: 'override_performed',
-      title: 'Override Performed',
-      description: 'Override attendance approved through full hierarchy',
-      time: '1 day ago',
-      icon: AlertTriangle,
-      color: 'text-amber-600'
-    }
-  ];
+    loadRecentActivities();
+  }, [user]);
 
-  const activities = user?.accessLevel === 'full' ? adminActivities : teacherActivities;
+  const formatTimeAgo = (timestamp: any) => {
+    if (!timestamp) return 'Unknown time';
+    
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const now = new Date();
+    const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
+    
+    if (diffInHours < 1) return 'Just now';
+    if (diffInHours < 24) return `${diffInHours}h ago`;
+    if (diffInHours < 48) return 'Yesterday';
+    return date.toLocaleDateString();
+  };
 
   return (
     <>
       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 h-fit">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Activity</h3>
         <div className="space-y-4">
-          {activities.map((activity) => {
+          {loading ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Clock className="w-6 h-6 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">Loading activities...</h3>
+              <p className="text-gray-600">Please wait while we fetch the latest activity.</p>
+            </div>
+          ) : recentActivities.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Search className="w-6 h-6 text-gray-400" />
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No activities found</h3>
+              <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {recentActivities.map((activity) => {
             const Icon = activity.icon;
             return (
               <div key={activity.id} className="flex items-start space-x-3">
@@ -387,9 +211,11 @@ const RecentActivity: React.FC = () => {
               </div>
             );
           })}
+            </div>
+          )}
         </div>
         <button 
-          onClick={() => setShowDetailModal(true)}
+          onClick={() => setShowModal(true)}
           className="mt-4 text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors"
         >
           View all activity
@@ -405,8 +231,8 @@ const RecentActivity: React.FC = () => {
       </div>
 
       <ActivityDetailModal 
-        isOpen={showDetailModal}
-        onClose={() => setShowDetailModal(false)}
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
       />
     </>
   );

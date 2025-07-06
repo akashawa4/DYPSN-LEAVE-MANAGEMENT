@@ -7,7 +7,7 @@ const LoginForm: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeTab, setActiveTab] = useState<'email' | 'demo'>('email');
-  const { sendEmailLink, login, isLoading } = useAuth();
+  const { sendEmailLink, login, isLoading, ensureDemoUsersInFirestore } = useAuth();
 
   const handleEmailLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,6 +29,17 @@ const LoginForm: React.FC = () => {
       await login(email, 'demo123');
     } catch (err: any) {
       setError('Invalid credentials. Please try again.');
+    }
+  };
+
+  const handleEnsureDemoUsers = async () => {
+    setError('');
+    setSuccess('');
+    try {
+      await ensureDemoUsersInFirestore();
+      setSuccess('All demo users have been ensured in Firestore!');
+    } catch (err: any) {
+      setError('Failed to ensure demo users in Firestore.');
     }
   };
 
@@ -150,23 +161,37 @@ const LoginForm: React.FC = () => {
                   <p className="text-sm text-red-600">{error}</p>
                 </div>
               )}
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-              >
-                {isLoading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                    <span>Signing in...</span>
-                  </>
-                ) : (
-                  <>
-                    <User className="w-5 h-5" />
-                    <span>Sign In as Demo</span>
-                  </>
-                )}
-              </button>
+              {success && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+                  <p className="text-sm text-green-700">{success}</p>
+                </div>
+              )}
+              <div className="space-y-3">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+                >
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                      <span>Signing in...</span>
+                    </>
+                  ) : (
+                    <>
+                      <User className="w-5 h-5" />
+                      <span>Sign In as Demo</span>
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleEnsureDemoUsers}
+                  className="w-full flex items-center justify-center space-x-2 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 font-medium text-sm"
+                >
+                  <span>Ensure All Demo Users in Firestore</span>
+                </button>
+              </div>
             </form>
           )}
         </div>

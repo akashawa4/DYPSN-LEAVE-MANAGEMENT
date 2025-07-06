@@ -1,114 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Bell, CheckCircle, AlertTriangle, Info, XCircle, Filter, Search, MoreHorizontal, Trash2, Archive } from 'lucide-react';
-
-interface Notification {
-  id: string;
-  title: string;
-  message: string;
-  type: 'info' | 'success' | 'warning' | 'error';
-  timestamp: string;
-  read: boolean;
-  category: 'leave' | 'attendance' | 'system' | 'announcement';
-  priority: 'low' | 'medium' | 'high';
-  actionRequired?: boolean;
-}
+import { useAuth } from '../../contexts/AuthContext';
+import { notificationService } from '../../firebase/firestore';
+import { Notification } from '../../types';
 
 const Notifications: React.FC = () => {
+  const { user } = useAuth();
   const [filterType, setFilterType] = useState('all');
   const [filterRead, setFilterRead] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedNotifications, setSelectedNotifications] = useState<string[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const notifications: Notification[] = [
-    {
-      id: 'N001',
-      title: 'Leave Request Approved',
-      message: 'Your medical leave request for March 15-16 has been approved by Dr. Michael Chen (HOD). Please check your email for detailed information.',
-      type: 'success',
-      timestamp: '2024-03-22T14:30:00Z',
-      read: false,
-      category: 'leave',
-      priority: 'high',
-      actionRequired: false
-    },
-    {
-      id: 'N002',
-      title: 'Attendance Reminder',
-      message: 'You have not clocked out yet today. Please remember to clock out before leaving the campus.',
-      type: 'warning',
-      timestamp: '2024-03-22T17:00:00Z',
-      read: false,
-      category: 'attendance',
-      priority: 'medium',
-      actionRequired: true
-    },
-    {
-      id: 'N003',
-      title: 'System Maintenance Notice',
-      message: 'The leave management system will be under maintenance on March 25, 2024, from 2:00 AM to 4:00 AM. Please plan your requests accordingly.',
-      type: 'info',
-      timestamp: '2024-03-21T09:00:00Z',
-      read: true,
-      category: 'system',
-      priority: 'low',
-      actionRequired: false
-    },
-    {
-      id: 'N004',
-      title: 'Leave Balance Update',
-      message: 'Your leave balance has been updated. You now have 3 casual leaves and 5 earned leaves remaining for this financial year.',
-      type: 'info',
-      timestamp: '2024-03-20T10:15:00Z',
-      read: true,
-      category: 'leave',
-      priority: 'low',
-      actionRequired: false
-    },
-    {
-      id: 'N005',
-      title: 'Holiday Announcement',
-      message: 'March 29, 2024 (Holi) has been declared as a public holiday. The college will remain closed.',
-      type: 'info',
-      timestamp: '2024-03-19T11:30:00Z',
-      read: false,
-      category: 'announcement',
-      priority: 'medium',
-      actionRequired: false
-    },
-    {
-      id: 'N006',
-      title: 'Late Arrival Alert',
-      message: 'You arrived late today (9:25 AM). Please ensure punctuality to maintain good attendance records.',
-      type: 'warning',
-      timestamp: '2024-03-18T09:30:00Z',
-      read: true,
-      category: 'attendance',
-      priority: 'medium',
-      actionRequired: false
-    },
-    {
-      id: 'N007',
-      title: 'Leave Request Returned',
-      message: 'Your casual leave request has been returned by Dr. Michael Chen. Reason: Please provide more specific details about the emergency.',
-      type: 'error',
-      timestamp: '2024-03-17T16:45:00Z',
-      read: false,
-      category: 'leave',
-      priority: 'high',
-      actionRequired: true
-    },
-    {
-      id: 'N008',
-      title: 'Monthly Attendance Report',
-      message: 'Your monthly attendance report for February 2024 is now available. You maintained 95% attendance this month.',
-      type: 'success',
-      timestamp: '2024-03-01T08:00:00Z',
-      read: true,
-      category: 'attendance',
-      priority: 'low',
-      actionRequired: false
-    }
-  ];
+  // Load user's notifications from Firestore
+  useEffect(() => {
+    const loadNotifications = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        const userNotifications = await notificationService.getNotificationsByUser(user.id);
+
+        setNotifications(userNotifications);
+      } catch (error) {
+        console.error('Error loading notifications:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadNotifications();
+  }, [user]);
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
@@ -318,7 +241,18 @@ const Notifications: React.FC = () => {
           </button>
         </div>
 
-        {filteredNotifications.map((notification) => (
+        {loading ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <p className="text-gray-600">Loading notifications...</p>
+          </div>
+        ) : filteredNotifications.length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+            <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications found</h3>
+            <p className="text-gray-600">Try adjusting your search or filter criteria</p>
+          </div>
+        ) : (
+          filteredNotifications.map((notification) => (
           <div
             key={notification.id}
             className={`border rounded-lg p-4 transition-all duration-200 hover:shadow-md ${
@@ -373,16 +307,9 @@ const Notifications: React.FC = () => {
               </div>
             </div>
           </div>
-        ))}
+          ))
+        )}
       </div>
-
-      {filteredNotifications.length === 0 && (
-        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
-          <Bell className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No notifications found</h3>
-          <p className="text-gray-600">Try adjusting your search or filter criteria</p>
-        </div>
-      )}
     </div>
   );
 };

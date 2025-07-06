@@ -1,41 +1,77 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, TrendingUp, MapPin, Download, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-
-interface AttendanceRecord {
-  date: string;
-  clockIn: string;
-  clockOut: string;
-  workingHours: string;
-  status: 'present' | 'absent' | 'late' | 'leave' | 'holiday';
-  location: string;
-  overtime?: string;
-}
+import { useAuth } from '../../contexts/AuthContext';
+import { attendanceService } from '../../firebase/firestore';
+import { AttendanceRecord } from '../../types';
 
 const MyAttendance: React.FC = () => {
+  const { user } = useAuth();
   const [selectedMonth, setSelectedMonth] = useState(new Date());
   const [viewType, setViewType] = useState<'calendar' | 'list'>('calendar');
+  const [attendanceData, setAttendanceData] = useState<AttendanceRecord[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const attendanceData: AttendanceRecord[] = [
-    { date: '2024-03-22', clockIn: '9:15 AM', clockOut: '5:30 PM', workingHours: '8h 15m', status: 'present', location: 'Main Campus - Block A' },
-    { date: '2024-03-21', clockIn: '9:10 AM', clockOut: '5:25 PM', workingHours: '8h 15m', status: 'present', location: 'Main Campus - Block A' },
-    { date: '2024-03-20', clockIn: '9:20 AM', clockOut: '5:35 PM', workingHours: '8h 15m', status: 'late', location: 'Main Campus - Block A' },
-    { date: '2024-03-19', clockIn: '---', clockOut: '---', workingHours: '---', status: 'leave', location: '---' },
-    { date: '2024-03-18', clockIn: '9:05 AM', clockOut: '5:20 PM', workingHours: '8h 15m', status: 'present', location: 'Main Campus - Block A' },
-    { date: '2024-03-15', clockIn: '---', clockOut: '---', workingHours: '---', status: 'leave', location: '---' },
-    { date: '2024-03-16', clockIn: '---', clockOut: '---', workingHours: '---', status: 'leave', location: '---' },
-    { date: '2024-03-14', clockIn: '9:00 AM', clockOut: '5:15 PM', workingHours: '8h 15m', status: 'present', location: 'Main Campus - Block A' },
-    { date: '2024-03-13', clockIn: '9:25 AM', clockOut: '5:40 PM', workingHours: '8h 15m', status: 'late', location: 'Main Campus - Block A' },
-    { date: '2024-03-12', clockIn: '9:10 AM', clockOut: '6:00 PM', workingHours: '8h 50m', status: 'present', location: 'Main Campus - Block A', overtime: '35m' },
-  ];
+  // Load user's attendance data from Firestore
+  useEffect(() => {
+    const loadAttendanceData = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        const records = await attendanceService.getAttendanceByUser(user.id);
 
-  const monthStats = {
-    totalDays: 24,
-    presentDays: 20,
-    leaveDays: 2,
-    lateDays: 2,
-    avgWorkingHours: '8h 18m',
-    totalOvertime: '2h 15m'
+        setAttendanceData(records);
+      } catch (error) {
+        console.error('Error loading attendance data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAttendanceData();
+  }, [user]);
+
+  // Calculate month stats from real data
+  const calculateMonthStats = () => {
+    const year = selectedMonth.getFullYear();
+    const month = selectedMonth.getMonth();
+    
+    const monthRecords = attendanceData.filter(record => {
+      const recordDate = new Date(record.date);
+      return recordDate.getFullYear() === year && recordDate.getMonth() === month;
+    });
+
+    const presentDays = monthRecords.filter(r => r.status === 'present').length;
+    const leaveDays = monthRecords.filter(r => r.status === 'leave').length;
+    const lateDays = monthRecords.filter(r => r.status === 'late').length;
+    const totalDays = monthRecords.length;
+
+    // Calculate average working hours
+    const workingHours = monthRecords
+      .filter(r => r.workingHours && r.workingHours !== '---')
+      .map(r => {
+        const hours = r.workingHours.split('h')[0];
+        const minutes = r.workingHours.split('h')[1]?.split('m')[0] || '0';
+        return parseInt(hours) + parseInt(minutes) / 60;
+      });
+
+    const avgHours = workingHours.length > 0 
+      ? workingHours.reduce((a, b) => a + b, 0) / workingHours.length 
+      : 0;
+
+    const avgWorkingHours = `${Math.floor(avgHours)}h ${Math.round((avgHours % 1) * 60)}m`;
+
+    return {
+      totalDays,
+      presentDays,
+      leaveDays,
+      lateDays,
+      avgWorkingHours,
+      totalOvertime: '2h 15m' // This would be calculated from overtime records
   };
+  };
+
+  const monthStats = calculateMonthStats();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -120,6 +156,13 @@ const MyAttendance: React.FC = () => {
         </div>
       </div>
 
+      {loading ? (
+        <div className="text-center py-12 bg-white rounded-lg border border-gray-200">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading attendance data...</p>
+        </div>
+      ) : (
+        <>
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         <div className="bg-white p-2 rounded-lg border border-gray-200">
@@ -351,6 +394,8 @@ const MyAttendance: React.FC = () => {
           </div>
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 };

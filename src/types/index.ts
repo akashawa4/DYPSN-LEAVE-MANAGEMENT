@@ -14,6 +14,7 @@ export interface User {
   createdAt?: string;
   lastLogin?: string;
   loginCount?: number;
+  updatedAt?: string;
 }
 
 export interface LeaveRequest {
@@ -30,7 +31,12 @@ export interface LeaveRequest {
   approvedBy?: string;
   approvedAt?: string;
   remarks?: string;
+  comments?: string;
   daysCount: number;
+  currentApprovalLevel?: string;
+  approvalFlow?: string[];
+  createdAt?: any; // Firestore timestamp
+  updatedAt?: any; // Firestore timestamp
 }
 
 export interface AttendanceRecord {
@@ -41,6 +47,20 @@ export interface AttendanceRecord {
   clockOut?: string;
   status: 'present' | 'absent' | 'late' | 'leave';
   workingHours?: number;
+}
+
+export interface AttendanceLog {
+  id: string;
+  userId: string;
+  userName: string;
+  date: Date;
+  clockIn: Date;
+  clockOut?: Date;
+  status: 'present' | 'absent' | 'late' | 'leave' | 'half-day';
+  workingHours?: number;
+  location?: string;
+  notes?: string;
+  createdAt?: any; // Firestore timestamp
 }
 
 export interface LeaveBalance {
@@ -64,10 +84,16 @@ export interface AuditLog {
 
 export interface Notification {
   id: string;
+  userId: string;
   title: string;
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
   timestamp: string;
   read: boolean;
+  readAt?: any; // Firestore timestamp
   targetRoles?: string[];
+  createdAt?: any; // Firestore timestamp
+  category?: 'leave' | 'attendance' | 'system' | 'announcement';
+  priority?: 'low' | 'medium' | 'high';
+  actionRequired?: boolean;
 }

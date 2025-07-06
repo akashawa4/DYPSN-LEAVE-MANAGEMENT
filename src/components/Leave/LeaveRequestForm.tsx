@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, FileText, Clock, AlertCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { leaveService } from '../../firebase/firestore';
 
 const LeaveRequestForm: React.FC = () => {
   const { user } = useAuth();
@@ -12,6 +13,7 @@ const LeaveRequestForm: React.FC = () => {
     attachments: null as FileList | null
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const leaveTypes = [
     { id: 'CL', name: 'Casual Leave', balance: 3 },
@@ -35,9 +37,34 @@ const LeaveRequestForm: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setMessage(null);
 
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+
+      const daysRequested = calculateDays();
+      
+      // Create leave request data
+      const leaveRequestData = {
+        userId: user.id,
+        userName: user.name,
+        department: user.department,
+        leaveType: formData.leaveType as 'CL' | 'ML' | 'EL' | 'LOP' | 'COH',
+        fromDate: formData.fromDate,
+        toDate: formData.toDate,
+        reason: formData.reason,
+        daysCount: daysRequested,
+        submittedAt: new Date().toISOString(),
+        currentApprovalLevel: 'HOD', // Start with HOD approval
+        approvalFlow: ['HOD', 'Principal', 'Registrar', 'HR Executive'] // Define approval hierarchy
+      };
+
+      // Save to Firestore
+      const requestId = await leaveService.createLeaveRequest(leaveRequestData);
+      
+
 
     // Reset form
     setFormData({
@@ -47,42 +74,59 @@ const LeaveRequestForm: React.FC = () => {
       reason: '',
       attachments: null
     });
+
+      setMessage({
+        type: 'success',
+        text: `Leave request submitted successfully! Request ID: ${requestId}`
+      });
+
+    } catch (error: any) {
+      console.error('Error submitting leave request:', error);
+      setMessage({
+        type: 'error',
+        text: error.message || 'Failed to submit leave request. Please try again.'
+      });
+    } finally {
     setIsSubmitting(false);
-    
-    // Show success message (in real app, use toast notification)
-    alert('Leave request submitted successfully!');
+    }
   };
 
   const selectedLeaveType = leaveTypes.find(type => type.id === formData.leaveType);
   const daysRequested = calculateDays();
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+      <div className="flex items-center space-x-3 mb-6">
+        <FileText className="w-6 h-6 text-blue-600" />
           <h1 className="text-2xl font-bold text-gray-900">Apply for Leave</h1>
-          <p className="text-gray-600">Submit your leave request for approval</p>
-        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        <div className="lg:col-span-3">
-          <form onSubmit={handleSubmit} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-6">
+      {message && (
+        <div className={`mb-6 p-4 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-50 border border-green-200 text-green-800' 
+            : 'bg-red-50 border border-red-200 text-red-800'
+        }`}>
+          {message.text}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Leave Type <span className="text-red-500">*</span>
+              Leave Type *
                 </label>
                 <select
+              required
                   value={formData.leaveType}
                   onChange={(e) => setFormData({ ...formData, leaveType: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
-                  <option value="">Select leave type</option>
-                  {leaveTypes.map(type => (
+              <option value="">Select Leave Type</option>
+              {leaveTypes.map((type) => (
                     <option key={type.id} value={type.id}>
-                      {type.name} ({type.balance} days available)
+                  {type.name} (Balance: {type.balance})
                     </option>
                   ))}
                 </select>
@@ -90,158 +134,108 @@ const LeaveRequestForm: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  From Date <span className="text-red-500">*</span>
+              Days Requested
+            </label>
+            <div className="flex items-center space-x-2 px-3 py-2 bg-gray-50 border border-gray-300 rounded-lg">
+              <Clock className="w-4 h-4 text-gray-500" />
+              <span className="text-gray-900 font-medium">{daysRequested} days</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              From Date *
                 </label>
                 <input
                   type="date"
+              required
                   value={formData.fromDate}
                   onChange={(e) => setFormData({ ...formData, fromDate: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min={new Date().toISOString().split('T')[0]}
-                  required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  To Date <span className="text-red-500">*</span>
+              To Date *
                 </label>
                 <input
                   type="date"
+              required
                   value={formData.toDate}
                   onChange={(e) => setFormData({ ...formData, toDate: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  min={formData.fromDate || new Date().toISOString().split('T')[0]}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+
+        {selectedLeaveType && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center space-x-2 mb-2">
+              <AlertCircle className="w-4 h-4 text-blue-600" />
+              <span className="text-sm font-medium text-blue-800">Leave Balance</span>
+            </div>
+            <p className="text-sm text-blue-700">
+              You have {selectedLeaveType.balance} {selectedLeaveType.name} days remaining.
+            </p>
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Reason for Leave *
+          </label>
+          <textarea
                   required
+            value={formData.reason}
+            onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
+            rows={4}
+            placeholder="Please provide a detailed reason for your leave request..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Supporting Documents
+            Supporting Documents (Optional)
                 </label>
                 <input
                   type="file"
-                  onChange={(e) => setFormData({ ...formData, attachments: e.target.files })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   multiple
                   accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+            onChange={(e) => setFormData({ ...formData, attachments: e.target.files })}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Upload medical certificates, documents (PDF, DOC, JPG, PNG)
-                </p>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Reason for Leave <span className="text-red-500">*</span>
-              </label>
-              <textarea
-                value={formData.reason}
-                onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                rows={4}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Please provide a detailed reason for your leave request (minimum 20 characters)"
-                minLength={20}
-                required
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                {formData.reason.length}/20 characters minimum
+            Accepted formats: PDF, DOC, DOCX, JPG, JPEG, PNG (Max 5MB each)
               </p>
             </div>
 
-            <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+        <div className="flex justify-end space-x-4">
               <button
                 type="button"
-                className="px-6 py-3 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
+            onClick={() => setFormData({
+              leaveType: '',
+              fromDate: '',
+              toDate: '',
+              reason: '',
+              attachments: null
+            })}
+            className="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition"
               >
-                Save as Draft
+            Reset
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting || !formData.leaveType || !formData.fromDate || !formData.toDate || formData.reason.length < 20}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium flex items-center space-x-2"
+            disabled={isSubmitting}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    <span>Submitting...</span>
-                  </>
-                ) : (
-                  <>
-                    <FileText className="w-4 h-4" />
-                    <span>Submit Request</span>
-                  </>
-                )}
+            {isSubmitting ? 'Submitting...' : 'Submit Request'}
               </button>
             </div>
           </form>
-        </div>
-
-        <div className="space-y-4">
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Leave Balance</h3>
-            <div className="space-y-4">
-              {leaveTypes.map(type => (
-                <div key={type.id} className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">{type.name}</span>
-                  <span className={`text-sm font-bold ${type.balance > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {type.balance} days
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {selectedLeaveType && daysRequested > 0 && (
-            <div className="bg-blue-50 p-6 rounded-xl border border-blue-200">
-              <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
-                <Calendar className="w-5 h-5 mr-2" />
-                Leave Preview
-              </h3>
-              <div className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">Leave Type:</span>
-                  <span className="text-sm font-medium text-blue-900">{selectedLeaveType.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">Duration:</span>
-                  <span className="text-sm font-medium text-blue-900">{daysRequested} days</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-sm text-blue-700">Balance After:</span>
-                  <span className={`text-sm font-bold ${selectedLeaveType.balance - daysRequested >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {selectedLeaveType.balance - daysRequested} days
-                  </span>
-                </div>
-                {selectedLeaveType.balance - daysRequested < 0 && (
-                  <div className="flex items-start space-x-2 pt-2 border-t border-blue-200">
-                    <AlertCircle className="w-4 h-4 text-red-500 mt-0.5" />
-                    <p className="text-xs text-red-600">
-                      Insufficient balance. This will be processed as LOP.
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="bg-amber-50 p-6 rounded-xl border border-amber-200">
-            <h3 className="text-lg font-semibold text-amber-900 mb-4 flex items-center">
-              <Clock className="w-5 h-5 mr-2" />
-              Important Notes
-            </h3>
-            <ul className="space-y-2 text-sm text-amber-800">
-              <li>• Submit leave requests at least 24 hours in advance</li>
-              <li>• Medical leave requires doctor&apos;s certificate</li>
-              <li>• Emergency leaves can be applied retrospectively</li>
-              <li>• Leave balance resets every financial year</li>
-              <li>• Maximum consecutive leave: 30 days (with approval)</li>
-            </ul>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };

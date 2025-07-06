@@ -1,7 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { ref, set, get } from 'firebase/database';
-import { database } from '../firebase/firebase';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -13,6 +11,7 @@ import {
   signInWithEmailLink
 } from 'firebase/auth';
 import { auth } from '../firebase/firebase';
+import { userService } from '../firebase/firestore';
 
 interface AuthContextType {
   user: User | null;
@@ -23,6 +22,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, userData: Partial<User>) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
+  ensureDemoUsersInFirestore: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -121,6 +121,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    // Ensure all demo users are in Firestore on app start
+    const ensureDemoUsers = async () => {
+      try {
+        for (const demoUser of mockUsers) {
+          const existingUser = await userService.getUser(demoUser.id);
+          if (!existingUser) {
+            console.log('[AuthContext] Creating demo user in Firestore on app start:', demoUser.email);
+            await userService.createUser({
+              ...demoUser,
+              createdAt: new Date().toISOString(),
+              lastLogin: new Date().toISOString(),
+              loginCount: 0
+            });
+          }
+        }
+      } catch (error) {
+        console.error('[AuthContext] Error ensuring demo users on app start:', error);
+      }
+    };
+    
+    ensureDemoUsers();
+
     // Handle email link sign-in on app load
     if (isSignInWithEmailLink(auth, window.location.href)) {
       const email = window.localStorage.getItem('emailForSignIn');
@@ -135,12 +157,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (firebaseUser) {
         // User is signed in with Firebase
         try {
-          // Try to get user data from Firebase Realtime Database
-          const userRef = ref(database, `users/${firebaseUser.uid}`);
-          const userSnapshot = await get(userRef);
+          // Try to get user data from Firestore
+          const userData = await userService.getUser(firebaseUser.uid);
           
-          if (userSnapshot.exists()) {
-            const userData = userSnapshot.val();
+          if (userData) {
             setUser(userData);
             localStorage.setItem('dypsn_user', JSON.stringify(userData));
           } else {
@@ -158,8 +178,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               loginCount: 1
             };
             
-            // Save to Firebase
-            await set(userRef, basicUserData);
+            // Save to Firestore
+            await userService.createUser(basicUserData);
             setUser(basicUserData);
             localStorage.setItem('dypsn_user', JSON.stringify(basicUserData));
           }
@@ -185,50 +205,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       // If password is provided, try Firebase Authentication (for demo fallback or legacy accounts)
       if (password) {
-        console.log('Attempting Firebase authentication...');
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        console.log('Firebase authentication successful:', userCredential.user.email);
         // User data will be handled by the auth state listener
       } else {
         throw new Error('Passwordless sign-in requires email link. Use sendEmailLink.');
       }
     } catch (firebaseError: any) {
-      console.log('Firebase auth failed, trying demo accounts:', firebaseError.code);
       // If Firebase auth fails, try demo accounts
       const foundUser = mockUsers.find(u => u.email === email);
       if (foundUser) {
-        console.log('Found demo user:', foundUser.name);
-        // Save user data to Firebase Realtime Database
+        // Save user data to Firestore
         try {
-          const userRef = ref(database, `users/${foundUser.id}`);
-          await set(userRef, {
-            ...foundUser,
-            lastLogin: new Date().toISOString(),
-            loginCount: 1 // This will be updated if user exists
-          });
-          // Check if user already exists and update login count
-          const existingUserSnapshot = await get(userRef);
-          if (existingUserSnapshot.exists()) {
-            const existingData = existingUserSnapshot.val();
-            await set(userRef, {
-              ...foundUser,
+          console.log('[AuthContext] Demo user login:', foundUser.email);
+          
+          // Check if user already exists in Firestore
+          const existingUser = await userService.getUser(foundUser.id);
+          
+          if (existingUser) {
+            console.log('[AuthContext] Updating existing user:', foundUser.id);
+            // Update existing user with new login info
+            await userService.updateUser(foundUser.id, {
               lastLogin: new Date().toISOString(),
-              loginCount: (existingData.loginCount || 0) + 1,
-              createdAt: existingData.createdAt || new Date().toISOString()
+              loginCount: (existingUser.loginCount || 0) + 1
             });
           } else {
-            // First time login - set creation date
-            await set(userRef, {
+            console.log('[AuthContext] Creating new user in Firestore:', foundUser.id);
+            // Create new user in Firestore
+            await userService.createUser({
               ...foundUser,
               lastLogin: new Date().toISOString(),
               loginCount: 1,
               createdAt: new Date().toISOString()
             });
           }
-          console.log('User data saved to Firebase successfully:', foundUser.name);
+          console.log('[AuthContext] User data saved to Firestore successfully');
         } catch (error) {
-          console.error('Error saving user data to Firebase:', error);
-          // Continue with login even if Firebase save fails
+          console.error('Error saving user data to Firestore:', error);
+          // Continue with login even if Firestore save fails
         }
         setUser(foundUser);
         localStorage.setItem('dypsn_user', JSON.stringify(foundUser));
@@ -268,10 +281,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, userData: Partial<User>) => {
     setIsLoading(true);
     try {
-      console.log('Creating Firebase user account...');
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const firebaseUser = userCredential.user;
-      console.log('Firebase user created successfully:', firebaseUser.uid);
       // Create complete user data
       const completeUserData: User = {
         id: firebaseUser.uid,
@@ -289,13 +300,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         lastLogin: new Date().toISOString(),
         loginCount: 1
       };
-      // Save to Firebase Realtime Database
-      console.log('Saving user data to Firebase Realtime Database...');
-      const userRef = ref(database, `users/${firebaseUser.uid}`);
-      await set(userRef, completeUserData);
+      // Save to Firestore
+      await userService.createUser(completeUserData);
       setUser(completeUserData);
       localStorage.setItem('dypsn_user', JSON.stringify(completeUserData));
-      console.log('User account created and saved successfully:', completeUserData.name);
     } catch (error: any) {
       console.error('Error creating user account:', error);
       throw new Error(error.message || 'Failed to create account');
@@ -316,36 +324,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('dypsn_user');
   };
 
+  const ensureDemoUsersInFirestore = async () => {
+    console.log('[AuthContext] Ensuring all demo users are in Firestore...');
+    try {
+      for (const demoUser of mockUsers) {
+        const existingUser = await userService.getUser(demoUser.id);
+        if (!existingUser) {
+          console.log('[AuthContext] Creating demo user in Firestore:', demoUser.email);
+          await userService.createUser({
+            ...demoUser,
+            createdAt: new Date().toISOString(),
+            lastLogin: new Date().toISOString(),
+            loginCount: 0
+          });
+        } else {
+          console.log('[AuthContext] Demo user already exists in Firestore:', demoUser.email);
+        }
+      }
+      console.log('[AuthContext] All demo users ensured in Firestore');
+    } catch (error) {
+      console.error('[AuthContext] Error ensuring demo users in Firestore:', error);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, firebaseUser, login, sendEmailLink, completeEmailLinkSignIn, signUp, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, firebaseUser, login, sendEmailLink, completeEmailLinkSignIn, signUp, logout, isLoading, ensureDemoUsersInFirestore }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
-// Utility function to save all demo users to Firebase
-export const saveAllDemoUsersToFirebase = async () => {
-  try {
-    const usersRef = ref(database, 'users');
-    const demoUsersData: { [key: string]: any } = {};
-    
-    mockUsers.forEach(user => {
-      demoUsersData[user.id] = {
-        ...user,
-        createdAt: new Date().toISOString(),
-        lastLogin: null,
-        loginCount: 0,
-        isDemoUser: true
-      };
-    });
-    
-    await set(usersRef, demoUsersData);
-    console.log('All demo users saved to Firebase successfully');
-    alert('All demo users have been saved to Firebase Realtime Database!');
-  } catch (error) {
-    console.error('Error saving demo users to Firebase:', error);
-  }
-};
+
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

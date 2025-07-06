@@ -8,9 +8,9 @@ import LeaveRequestForm from './components/Leave/LeaveRequestForm';
 import LeaveApprovalPanel from './components/Leave/LeaveApprovalPanel';
 import MyLeaves from './components/Leave/MyLeaves';
 import MyAttendance from './components/Attendance/MyAttendance';
+import ESLBiometricIntegration from './components/Attendance/ESLBiometricIntegration';
 import Notifications from './components/Notifications/Notifications';
 import { Upload, BarChart3, Users, Calendar, FileText } from 'lucide-react';
-import { saveAllDemoUsersToFirebase } from './contexts/AuthContext';
 
 const ProfilePage: React.FC<{ user: any }> = ({ user }) => (
   <div className="max-w-md mx-auto bg-white rounded-xl shadow-md p-6 border border-gray-200 mt-8">
@@ -155,17 +155,7 @@ const UserManagementPage: React.FC = () => {
           <p className="text-xs text-gray-500 mt-2">Accepted formats: .xlsx, .xls</p>
         </div>
         
-        <div>
-          <button
-            type="button"
-            onClick={saveAllDemoUsersToFirebase}
-            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-blue-700 transition"
-          >
-            <Users className="w-5 h-5" />
-            <span>Save Demo Users to Firebase</span>
-          </button>
-          <p className="text-xs text-gray-500 mt-2">Upload all demo accounts to Firebase Realtime Database</p>
-        </div>
+
       </div>
       <div className="my-6 border-t border-gray-200"></div>
       <h3 className="text-lg font-semibold text-gray-900 mb-2">All Users</h3>
@@ -332,13 +322,15 @@ const AppContent: React.FC = () => {
       case 'profile':
         return <ProfilePage user={user} />;
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard onPageChange={setCurrentPage} />;
       case 'apply-leave':
         return <LeaveRequestForm />;
       case 'my-leaves':
         return <MyLeaves />;
       case 'my-attendance':
         return <MyAttendance />;
+      case 'esl-integration':
+        return <ESLBiometricIntegration />;
       case 'notifications':
         return <Notifications />;
       case 'leave-requests':

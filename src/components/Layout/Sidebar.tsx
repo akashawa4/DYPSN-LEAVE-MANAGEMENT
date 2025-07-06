@@ -46,6 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, currentPage, onPageC
       { id: 'approvals', label: 'Approvals Panel', icon: CheckCircle },
       { id: 'override', label: 'Override Center', icon: RotateCcw },
       { id: 'attendance', label: 'Attendance Logs', icon: Calendar },
+      { id: 'esl-integration', label: 'ESL Biometric', icon: Calendar },
       { id: 'reports', label: 'MIS & Reports', icon: BarChart3 },
       { id: 'audit', label: 'Audit Logs', icon: FileCheck },
       { id: 'users', label: 'User Management', icon: Users },
@@ -72,6 +73,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose, currentPage, onPageC
         fixed top-0 left-0 h-full w-64 bg-white shadow-xl transform transition-transform duration-300 ease-in-out z-50
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         lg:translate-x-0 lg:static lg:shadow-none lg:border-r lg:border-gray-200
+        overflow-y-auto
       `}>
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
           <div className="flex items-center space-x-3">

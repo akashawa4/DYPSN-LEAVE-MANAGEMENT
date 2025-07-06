@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CheckCircle, 
   XCircle, 
@@ -16,32 +16,8 @@ import {
   Download
 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-
-interface LeaveRequest {
-  id: string;
-  employeeId: string;
-  employeeName: string;
-  department: string;
-  designation: string;
-  leaveType: 'CL' | 'EL' | 'ML' | 'LOP' | 'COH';
-  fromDate: string;
-  toDate: string;
-  days: number;
-  reason: string;
-  status: 'pending' | 'approved' | 'rejected' | 'returned';
-  submittedDate: string;
-  currentApprovalLevel: 'HOD' | 'Principal' | 'Registrar' | 'HR Executive';
-  approvalHistory: {
-    level: string;
-    approver: string;
-    action: 'approved' | 'rejected' | 'returned' | 'pending';
-    date?: string;
-    remarks?: string;
-  }[];
-  attachments?: string[];
-  priority: 'low' | 'medium' | 'high';
-  emergencyContact?: string;
-}
+import { leaveService } from '../../firebase/firestore';
+import { LeaveRequest } from '../../types';
 
 interface ApprovalModalProps {
   isOpen: boolean;
@@ -113,10 +89,10 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({
               <div>
                 <label className="text-sm font-medium text-gray-500">Employee Details</label>
                 <div className="mt-1">
-                  <p className="text-lg font-semibold text-gray-900">{request.employeeName}</p>
-                  <p className="text-sm text-gray-600">{request.designation}</p>
+                  <p className="text-lg font-semibold text-gray-900">{request.userName}</p>
+                  <p className="text-sm text-gray-600">Employee</p>
                   <p className="text-sm text-gray-600">{request.department}</p>
-                  <p className="text-sm text-gray-600">ID: {request.employeeId}</p>
+                  <p className="text-sm text-gray-600">ID: {request.userId}</p>
                 </div>
               </div>
 
@@ -124,10 +100,10 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({
                 <label className="text-sm font-medium text-gray-500">Leave Details</label>
                 <div className="mt-1 space-y-1">
                   <p className="text-sm"><strong>Type:</strong> {getLeaveTypeName(request.leaveType)}</p>
-                  <p className="text-sm"><strong>Duration:</strong> {request.days} day{request.days > 1 ? 's' : ''}</p>
+                  <p className="text-sm"><strong>Duration:</strong> {request.daysCount} day{request.daysCount > 1 ? 's' : ''}</p>
                   <p className="text-sm"><strong>From:</strong> {new Date(request.fromDate).toLocaleDateString()}</p>
                   <p className="text-sm"><strong>To:</strong> {new Date(request.toDate).toLocaleDateString()}</p>
-                  <p className="text-sm"><strong>Submitted:</strong> {new Date(request.submittedDate).toLocaleDateString()}</p>
+                  <p className="text-sm"><strong>Submitted:</strong> {new Date(request.submittedAt).toLocaleDateString()}</p>
                 </div>
               </div>
             </div>
@@ -141,65 +117,34 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({
               </div>
 
               <div>
-                <label className="text-sm font-medium text-gray-500">Priority Level</label>
+                <label className="text-sm font-medium text-gray-500">Current Approval Level</label>
                 <div className="mt-1">
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    request.priority === 'high' ? 'bg-red-100 text-red-800' :
-                    request.priority === 'medium' ? 'bg-amber-100 text-amber-800' :
-                    'bg-green-100 text-green-800'
-                  }`}>
-                    {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)} Priority
+                  <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                    {request.currentApprovalLevel || 'HOD'}
                   </span>
                 </div>
               </div>
-
-              {request.attachments && request.attachments.length > 0 && (
-                <div>
-                  <label className="text-sm font-medium text-gray-500">Attachments</label>
-                  <div className="mt-1 space-y-1">
-                    {request.attachments.map((attachment, index) => (
-                      <div key={index} className="flex items-center space-x-2 text-sm text-blue-600">
-                        <FileText className="w-4 h-4" />
-                        <span>{attachment}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
-          {/* Approval History */}
+          {/* Approval Flow */}
           <div>
-            <label className="text-sm font-medium text-gray-500">Approval History</label>
+            <label className="text-sm font-medium text-gray-500">Approval Flow</label>
             <div className="mt-2 space-y-2">
-              {request.approvalHistory.map((history, index) => (
+              {request.approvalFlow && request.approvalFlow.map((level, index) => (
                 <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                   <div className={`w-3 h-3 rounded-full ${
-                    history.action === 'approved' ? 'bg-green-500' :
-                    history.action === 'rejected' ? 'bg-red-500' :
-                    history.action === 'returned' ? 'bg-amber-500' :
+                    level === request.currentApprovalLevel ? 'bg-blue-500' :
+                    request.approvalFlow && index < request.approvalFlow.indexOf(request.currentApprovalLevel || 'HOD') ? 'bg-green-500' :
                     'bg-gray-300'
                   }`}></div>
                   <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium text-gray-900">{history.level}</span>
-                      <span className={`text-xs px-2 py-1 rounded-full ${
-                        history.action === 'approved' ? 'bg-green-100 text-green-800' :
-                        history.action === 'rejected' ? 'bg-red-100 text-red-800' :
-                        history.action === 'returned' ? 'bg-amber-100 text-amber-800' :
-                        'bg-gray-100 text-gray-800'
-                      }`}>
-                        {history.action.charAt(0).toUpperCase() + history.action.slice(1)}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-600">{history.approver}</p>
-                    {history.date && (
-                      <p className="text-xs text-gray-500">{new Date(history.date).toLocaleDateString()}</p>
-                    )}
-                    {history.remarks && (
-                      <p className="text-xs text-gray-600 mt-1 italic">"{history.remarks}"</p>
-                    )}
+                    <span className="font-medium text-gray-900">{level}</span>
+                    <p className="text-sm text-gray-600">
+                      {level === request.currentApprovalLevel ? 'Current Level' : 
+                       request.approvalFlow && index < request.approvalFlow.indexOf(request.currentApprovalLevel || 'HOD') ? 'Completed' : 
+                       'Pending'}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -320,149 +265,33 @@ const LeaveApprovalPanel: React.FC = () => {
   const [filterDepartment, setFilterDepartment] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [banner, setBanner] = useState<{ type: 'approve' | 'reject' | 'return'; message: string } | null>(null);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
 
-  // Mock data - in real app, this would come from API based on user role
-  const leaveRequests: LeaveRequest[] = [
-    {
-      id: 'LR001',
-      employeeId: 'EMP001',
-      employeeName: 'Dr. Sarah Johnson',
-      department: 'Computer Science',
-      designation: 'Assistant Professor',
-      leaveType: 'ML',
-      fromDate: '2024-03-25',
-      toDate: '2024-03-26',
-      days: 2,
-      reason: 'Medical checkup and treatment for chronic back pain. Doctor has advised rest for 2 days.',
-      status: 'pending',
-      submittedDate: '2024-03-22',
-      currentApprovalLevel: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-      approvalHistory: [
-        ...(user?.role !== 'hod' ? [{
-          level: 'HOD',
-          approver: 'Dr. Michael Chen',
-          action: 'approved' as const,
-          date: '2024-03-22',
-          remarks: 'Medical certificate provided. Approved for medical treatment.'
-        }] : []),
-        ...(user?.role === 'registrar' || user?.role === 'hr' ? [{
-          level: 'Principal',
-          approver: 'Dr. Priya Sharma',
-          action: 'approved' as const,
-          date: '2024-03-23',
-          remarks: 'Academic schedule adjusted. Approved.'
-        }] : []),
-        ...(user?.role === 'hr' ? [{
-          level: 'Registrar',
-          approver: 'Ms. Anjali Desai',
-          action: 'approved' as const,
-          date: '2024-03-23',
-          remarks: 'Administrative clearance provided.'
-        }] : []),
-        {
-          level: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-          approver: user?.name || '',
-          action: 'pending' as const
-        }
-      ],
-      attachments: ['medical_certificate.pdf', 'doctor_prescription.jpg'],
-      priority: 'high',
-      emergencyContact: '+91 98765 43210'
-    },
-    {
-      id: 'LR002',
-      employeeId: 'EMP002',
-      employeeName: 'Prof. Rajesh Kumar',
-      department: 'Mechanical Engineering',
-      designation: 'Professor',
-      leaveType: 'CL',
-      fromDate: '2024-03-28',
-      toDate: '2024-03-29',
-      days: 2,
-      reason: 'Family wedding ceremony. Need to travel to hometown for the function.',
-      status: 'pending',
-      submittedDate: '2024-03-23',
-      currentApprovalLevel: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-      approvalHistory: [
-        ...(user?.role !== 'hod' ? [{
-          level: 'HOD',
-          approver: 'Dr. Amit Patel',
-          action: 'approved' as const,
-          date: '2024-03-23',
-          remarks: 'Family function approved. Classes will be covered.'
-        }] : []),
-        ...(user?.role === 'registrar' || user?.role === 'hr' ? [{
-          level: 'Principal',
-          approver: 'Dr. Priya Sharma',
-          action: 'approved' as const,
-          date: '2024-03-24',
-          remarks: 'Approved for family function.'
-        }] : []),
-        ...(user?.role === 'hr' ? [{
-          level: 'Registrar',
-          approver: 'Ms. Anjali Desai',
-          action: 'approved' as const,
-          date: '2024-03-24',
-          remarks: 'Administrative approval granted.'
-        }] : []),
-        {
-          level: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-          approver: user?.name || '',
-          action: 'pending' as const
-        }
-      ],
-      priority: 'medium'
-    },
-    {
-      id: 'LR003',
-      employeeId: 'EMP003',
-      employeeName: 'Dr. Priya Mehta',
-      department: 'Electronics',
-      designation: 'Associate Professor',
-      leaveType: 'EL',
-      fromDate: '2024-04-01',
-      toDate: '2024-04-05',
-      days: 5,
-      reason: 'Annual vacation with family. Planning to visit hill station for relaxation.',
-      status: 'pending',
-      submittedDate: '2024-03-20',
-      currentApprovalLevel: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-      approvalHistory: [
-        ...(user?.role !== 'hod' ? [{
-          level: 'HOD',
-          approver: 'Dr. Suresh Gupta',
-          action: 'approved' as const,
-          date: '2024-03-21',
-          remarks: 'Annual leave approved. Substitute arrangements made.'
-        }] : []),
-        ...(user?.role === 'registrar' || user?.role === 'hr' ? [{
-          level: 'Principal',
-          approver: 'Dr. Priya Sharma',
-          action: 'approved' as const,
-          date: '2024-03-22',
-          remarks: 'Annual vacation approved.'
-        }] : []),
-        ...(user?.role === 'hr' ? [{
-          level: 'Registrar',
-          approver: 'Ms. Anjali Desai',
-          action: 'approved' as const,
-          date: '2024-03-22',
-          remarks: 'Leave balance verified and approved.'
-        }] : []),
-        {
-          level: user?.role === 'hod' ? 'HOD' : user?.role === 'principal' ? 'Principal' : user?.role === 'registrar' ? 'Registrar' : 'HR Executive',
-          approver: user?.name || '',
-          action: 'pending' as const
-        }
-      ],
-      priority: 'low'
-    }
-  ];
+  useEffect(() => {
+    const fetchLeaveRequests = async () => {
+      try {
+        const requests = await leaveService.getLeaveRequestsByApprover(user?.id || '');
+        setLeaveRequests(requests);
+      } catch (error) {
+        console.error("Error fetching leave requests:", error);
+        setBanner({ type: 'reject', message: 'Failed to fetch leave requests.' });
+        setTimeout(() => setBanner(null), 3000);
+      }
+    };
 
-  const handleApprovalAction = (action: 'approve' | 'reject' | 'return', remarks?: string) => {
-    // In real app, this would make API call to update the request
-    console.log(`${action} request ${selectedRequest?.id} with remarks: ${remarks}`);
-    // Show animated banner instead of alert
+    fetchLeaveRequests();
+    const interval = setInterval(fetchLeaveRequests, 30000); // Poll every 30 seconds
+    return () => clearInterval(interval);
+  }, [user?.id]);
+
+  const handleApprovalAction = async (action: 'approve' | 'reject' | 'return', remarks?: string) => {
+    if (!selectedRequest) return;
+
+    console.log('[LeaveApprovalPanel] Starting approval action:', action, 'for request:', selectedRequest.id);
+    console.log('[LeaveApprovalPanel] Current user:', user);
+
+    try {
+      await leaveService.updateLeaveRequestStatus(selectedRequest.id, action, user?.id, remarks);
     setBanner({
       type: action,
       message:
@@ -473,7 +302,25 @@ const LeaveApprovalPanel: React.FC = () => {
           : 'Leave request returned for revision.'
     });
     setTimeout(() => setBanner(null), 3000);
-    // Close modal
+      // Refresh the list after action
+      const updatedRequests = await leaveService.getLeaveRequestsByApprover(user?.id || '');
+      setLeaveRequests(updatedRequests);
+    } catch (error: any) {
+      console.error("[LeaveApprovalPanel] Error updating leave request status:", error);
+      console.error("[LeaveApprovalPanel] Error message:", error.message);
+      console.error("[LeaveApprovalPanel] Error code:", error.code);
+      
+      let errorMessage = 'Failed to update leave request status.';
+      if (error.message) {
+        errorMessage += ` ${error.message}`;
+      }
+      if (error.code) {
+        errorMessage += ` (Code: ${error.code})`;
+      }
+      
+      setBanner({ type: 'reject', message: errorMessage });
+      setTimeout(() => setBanner(null), 5000);
+    }
     setShowApprovalModal(false);
     setSelectedRequest(null);
   };
@@ -481,8 +328,8 @@ const LeaveApprovalPanel: React.FC = () => {
   const filteredRequests = leaveRequests.filter(request => {
     const matchesStatus = filterStatus === 'all' || request.status === filterStatus;
     const matchesDepartment = filterDepartment === 'all' || request.department === filterDepartment;
-    const matchesSearch = request.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         request.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = request.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         request.userId.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          request.reason.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesDepartment && matchesSearch;
   });
@@ -547,6 +394,25 @@ const LeaveApprovalPanel: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center space-x-3">
+          <button 
+            onClick={async () => {
+              try {
+                const result = await leaveService.testFirestoreConnection();
+                if (result) {
+                  setBanner({ type: 'approve', message: 'Firestore connection test successful!' });
+                } else {
+                  setBanner({ type: 'reject', message: 'Firestore connection test failed!' });
+                }
+                setTimeout(() => setBanner(null), 3000);
+              } catch (error) {
+                setBanner({ type: 'reject', message: 'Firestore test error: ' + error.message });
+                setTimeout(() => setBanner(null), 3000);
+              }
+            }}
+            className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <span>Test Firestore</span>
+          </button>
           <button className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
             <Download className="w-4 h-4" />
             <span>Export Report</span>
@@ -641,7 +507,7 @@ const LeaveApprovalPanel: React.FC = () => {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Employee</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Leave Details</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Duration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Approval Level</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
               </tr>
@@ -662,10 +528,10 @@ const LeaveApprovalPanel: React.FC = () => {
                         <User className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <p className="font-medium text-gray-900">{request.employeeName}</p>
-                        <p className="text-sm text-gray-600">{request.designation}</p>
+                        <p className="font-medium text-gray-900">{request.userName}</p>
+                        <p className="text-sm text-gray-600">{user?.designation || 'Employee'}</p>
                         <p className="text-sm text-gray-500">{request.department}</p>
-                        <p className="text-xs text-gray-400">ID: {request.employeeId}</p>
+                        <p className="text-xs text-gray-400">ID: {request.userId}</p>
                       </div>
                     </div>
                   </td>
@@ -677,14 +543,8 @@ const LeaveApprovalPanel: React.FC = () => {
                       </div>
                       <p className="text-sm text-gray-600 mt-1 line-clamp-2">{request.reason}</p>
                       <p className="text-xs text-gray-400 mt-1">
-                        Submitted: {new Date(request.submittedDate).toLocaleDateString()}
+                        Submitted: {new Date(request.submittedAt).toLocaleDateString()}
                       </p>
-                      {request.attachments && request.attachments.length > 0 && (
-                        <div className="flex items-center space-x-1 mt-1">
-                          <FileText className="w-3 h-3 text-gray-400" />
-                          <span className="text-xs text-gray-500">{request.attachments.length} attachment(s)</span>
-                        </div>
-                      )}
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -692,12 +552,12 @@ const LeaveApprovalPanel: React.FC = () => {
                       <p className="text-sm font-medium text-gray-900">
                         {new Date(request.fromDate).toLocaleDateString()} - {new Date(request.toDate).toLocaleDateString()}
                       </p>
-                      <p className="text-xs text-gray-600">{request.days} day{request.days > 1 ? 's' : ''}</p>
+                      <p className="text-xs text-gray-600">{request.daysCount} day{request.daysCount > 1 ? 's' : ''}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${getPriorityColor(request.priority)}`}>
-                      {request.priority.charAt(0).toUpperCase() + request.priority.slice(1)}
+                    <span className="inline-flex px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                      {request.currentApprovalLevel || 'HOD'}
                     </span>
                   </td>
                   <td className="px-6 py-4">

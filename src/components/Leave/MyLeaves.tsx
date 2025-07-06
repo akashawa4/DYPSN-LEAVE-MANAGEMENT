@@ -1,96 +1,37 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, CheckCircle, XCircle, AlertTriangle, Filter, Search, Download, Eye, MoreHorizontal } from 'lucide-react';
-
-interface LeaveRecord {
-  id: string;
-  type: 'CL' | 'EL' | 'ML' | 'LOP' | 'COH';
-  fromDate: string;
-  toDate: string;
-  days: number;
-  reason: string;
-  status: 'approved' | 'pending' | 'rejected' | 'returned';
-  submittedDate: string;
-  approver?: string;
-  approvedDate?: string;
-  remarks?: string;
-  currentApprovalLevel?: string;
-  approvalFlow?: string[];
-}
+import { useAuth } from '../../contexts/AuthContext';
+import { leaveService } from '../../firebase/firestore';
+import { LeaveRequest } from '../../types';
 
 const MyLeaves: React.FC = () => {
+  const { user } = useAuth();
   const [filterStatus, setFilterStatus] = useState('all');
   const [filterType, setFilterType] = useState('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedLeave, setSelectedLeave] = useState<LeaveRecord | null>(null);
+  const [selectedLeave, setSelectedLeave] = useState<LeaveRequest | null>(null);
+  const [leaveRecords, setLeaveRecords] = useState<LeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const leaveRecords: LeaveRecord[] = [
-    {
-      id: 'LV001',
-      type: 'CL',
-      fromDate: '2024-03-25',
-      toDate: '2024-03-25',
-      days: 1,
-      reason: 'Personal work - family function',
-      status: 'pending',
-      submittedDate: '2024-03-22',
-      currentApprovalLevel: 'HOD',
-      approvalFlow: ['HOD', 'Principal', 'Registrar', 'HR Executive']
-    },
-    {
-      id: 'LV002',
-      type: 'ML',
-      fromDate: '2024-03-15',
-      toDate: '2024-03-16',
-      days: 2,
-      reason: 'Fever and flu symptoms',
-      status: 'approved',
-      submittedDate: '2024-03-14',
-      approver: 'Mr. Arjun Kumar (HR Executive)',
-      approvedDate: '2024-03-14',
-      remarks: 'Medical certificate provided. Get well soon!',
-      approvalFlow: ['HOD ✓', 'Principal ✓', 'Registrar ✓', 'HR Executive ✓']
-    },
-    {
-      id: 'LV003',
-      type: 'CL',
-      fromDate: '2024-03-08',
-      toDate: '2024-03-08',
-      days: 1,
-      reason: 'Personal appointment',
-      status: 'approved',
-      submittedDate: '2024-03-07',
-      approver: 'Mr. Arjun Kumar (HR Executive)',
-      approvedDate: '2024-03-07',
-      approvalFlow: ['HOD ✓', 'Principal ✓', 'Registrar ✓', 'HR Executive ✓']
-    },
-    {
-      id: 'LV004',
-      type: 'EL',
-      fromDate: '2024-02-20',
-      toDate: '2024-02-22',
-      days: 3,
-      reason: 'Family vacation',
-      status: 'approved',
-      submittedDate: '2024-02-15',
-      approver: 'Mr. Arjun Kumar (HR Executive)',
-      approvedDate: '2024-02-16',
-      approvalFlow: ['HOD ✓', 'Principal ✓', 'Registrar ✓', 'HR Executive ✓']
-    },
-    {
-      id: 'LV005',
-      type: 'CL',
-      fromDate: '2024-02-10',
-      toDate: '2024-02-11',
-      days: 2,
-      reason: 'Insufficient documentation provided',
-      status: 'returned',
-      submittedDate: '2024-02-08',
-      approver: 'Dr. Michael Chen (HOD)',
-      remarks: 'Please provide more details about the emergency',
-      currentApprovalLevel: 'HOD',
-      approvalFlow: ['HOD ⚠️', 'Principal', 'Registrar', 'HR Executive']
-    }
-  ];
+  // Load user's leave requests from Firestore
+  useEffect(() => {
+    const loadLeaveRequests = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        const requests = await leaveService.getLeaveRequestsByUser(user.id);
+
+        setLeaveRecords(requests);
+      } catch (error) {
+        console.error('Error loading leave requests:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadLeaveRequests();
+  }, [user]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -125,7 +66,7 @@ const MyLeaves: React.FC = () => {
 
   const filteredLeaves = leaveRecords.filter(leave => {
     const matchesStatus = filterStatus === 'all' || leave.status === filterStatus;
-    const matchesType = filterType === 'all' || leave.type === filterType;
+    const matchesType = filterType === 'all' || leave.leaveType === filterType;
     const matchesSearch = leave.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          leave.id.toLowerCase().includes(searchTerm.toLowerCase());
     return matchesStatus && matchesType && matchesSearch;
@@ -137,6 +78,23 @@ const MyLeaves: React.FC = () => {
     pending: leaveRecords.filter(l => l.status === 'pending').length,
     rejected: leaveRecords.filter(l => l.status === 'rejected').length + leaveRecords.filter(l => l.status === 'returned').length
   };
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">My Leaves</h1>
+            <p className="text-gray-600">Track and manage your leave requests</p>
+          </div>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">Loading leave requests...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -249,11 +207,11 @@ const MyLeaves: React.FC = () => {
                   <td className="px-6 py-4">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-medium text-gray-900">{getLeaveTypeName(leave.type)}</span>
+                        <span className="font-medium text-gray-900">{getLeaveTypeName(leave.leaveType)}</span>
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{leave.id}</span>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{leave.reason}</p>
-                      <p className="text-xs text-gray-400 mt-1">Submitted: {new Date(leave.submittedDate).toLocaleDateString()}</p>
+                      <p className="text-xs text-gray-400 mt-1">Submitted: {new Date(leave.submittedAt).toLocaleDateString()}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -261,7 +219,7 @@ const MyLeaves: React.FC = () => {
                       <p className="text-sm font-medium text-gray-900">
                         {new Date(leave.fromDate).toLocaleDateString()} - {new Date(leave.toDate).toLocaleDateString()}
                       </p>
-                      <p className="text-xs text-gray-600">{leave.days} day{leave.days > 1 ? 's' : ''}</p>
+                      <p className="text-xs text-gray-600">{leave.daysCount} day{leave.daysCount > 1 ? 's' : ''}</p>
                     </div>
                   </td>
                   <td className="px-6 py-4">
@@ -340,7 +298,7 @@ const MyLeaves: React.FC = () => {
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">Leave Type</label>
-                  <p className="text-lg font-semibold text-gray-900">{getLeaveTypeName(selectedLeave.type)}</p>
+                  <p className="text-lg font-semibold text-gray-900">{getLeaveTypeName(selectedLeave.leaveType)}</p>
                 </div>
                 <div>
                   <label className="text-sm font-medium text-gray-500">From Date</label>

@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Clock, FileText, CheckCircle, AlertCircle, X, Calendar, TrendingUp, User, MapPin } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { leaveService, attendanceService } from '../../firebase/firestore';
+import { LeaveRequest } from '../../types';
 
 interface DetailModalProps {
   isOpen: boolean;
@@ -35,8 +37,79 @@ const DetailModal: React.FC<DetailModalProps> = ({ isOpen, onClose, title, child
 const DashboardStats: React.FC = () => {
   const { user } = useAuth();
   const [selectedModal, setSelectedModal] = useState<string | null>(null);
+  const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const teacherStats = [
+  // Load user's leave requests for stats
+  useEffect(() => {
+    const loadLeaveRequests = async () => {
+      if (!user) return;
+      
+      try {
+        setLoading(true);
+        const requests = await leaveService.getLeaveRequestsByUser(user.id);
+        setLeaveRequests(requests);
+      } catch (error) {
+        console.error('Error loading leave requests for stats:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadLeaveRequests();
+  }, [user]);
+
+  // Calculate stats from real data
+  const calculateStats = () => {
+    if (!user) return [];
+
+    const pendingRequests = leaveRequests.filter(req => req.status === 'pending').length;
+    const approvedRequests = leaveRequests.filter(req => req.status === 'approved').length;
+    const totalRequests = leaveRequests.length;
+
+    if (user.accessLevel === 'full') {
+      // Admin stats
+      return [
+        {
+          id: 'staff',
+          title: 'Total Staff',
+          value: '156',
+          change: '+5 this month',
+          changeType: 'positive' as const,
+          icon: Clock,
+          color: 'blue'
+        },
+        {
+          id: 'approvals',
+          title: 'Pending Approvals',
+          value: pendingRequests.toString(),
+          change: 'Requires attention',
+          changeType: 'warning' as const,
+          icon: AlertCircle,
+          color: 'amber'
+        },
+        {
+          id: 'present',
+          title: 'Today Present',
+          value: '142/156',
+          change: '91% attendance',
+          changeType: 'positive' as const,
+          icon: CheckCircle,
+          color: 'green'
+        },
+        {
+          id: 'leaves',
+          title: 'Monthly Leaves',
+          value: totalRequests.toString(),
+          change: `${approvedRequests} approved`,
+          changeType: 'neutral' as const,
+          icon: FileText,
+          color: 'purple'
+        }
+      ];
+    } else {
+      // Teacher stats
+      return [
     {
       id: 'attendance',
       title: 'This Month Attendance',
@@ -58,7 +131,7 @@ const DashboardStats: React.FC = () => {
     {
       id: 'pending',
       title: 'Pending Requests',
-      value: '1',
+          value: pendingRequests.toString(),
       change: 'Awaiting approval',
       changeType: 'warning' as const,
       icon: AlertCircle,
@@ -67,54 +140,17 @@ const DashboardStats: React.FC = () => {
     {
       id: 'approved',
       title: 'Approved Leaves',
-      value: '2',
+          value: approvedRequests.toString(),
       change: 'This month',
       changeType: 'positive' as const,
       icon: CheckCircle,
       color: 'green'
     }
   ];
-
-  const adminStats = [
-    {
-      id: 'staff',
-      title: 'Total Staff',
-      value: '156',
-      change: '+5 this month',
-      changeType: 'positive' as const,
-      icon: Clock,
-      color: 'blue'
-    },
-    {
-      id: 'approvals',
-      title: 'Pending Approvals',
-      value: '12',
-      change: 'Requires attention',
-      changeType: 'warning' as const,
-      icon: AlertCircle,
-      color: 'amber'
-    },
-    {
-      id: 'present',
-      title: 'Today Present',
-      value: '142/156',
-      change: '91% attendance',
-      changeType: 'positive' as const,
-      icon: CheckCircle,
-      color: 'green'
-    },
-    {
-      id: 'leaves',
-      title: 'Monthly Leaves',
-      value: '45',
-      change: '+8 from last month',
-      changeType: 'neutral' as const,
-      icon: FileText,
-      color: 'purple'
     }
-  ];
+  };
 
-  const stats = user?.accessLevel === 'full' ? adminStats : teacherStats;
+  const stats = calculateStats();
 
   const getColorClasses = (color: string) => {
     const colorMap = {
